@@ -20,16 +20,24 @@ function slugify(str) {
   );
 }
 
-function Modal({ title, initialValue = '', onConfirm, onCancel, placeholder }) {
+function Modal({
+  title,
+  initialValue = '',
+  onConfirm,
+  onCancel,
+  placeholder,
+  requireInput = false,
+}) {
   const [value, setValue] = useState(initialValue);
   const inputRef = useRef(null);
+  const confirmDisabled = requireInput && !value.trim();
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter') onConfirm(value.trim());
+    if (e.key === 'Enter' && !confirmDisabled) onConfirm(value.trim());
     if (e.key === 'Escape') onCancel();
   }
 
@@ -51,6 +59,7 @@ function Modal({ title, initialValue = '', onConfirm, onCancel, placeholder }) {
           <button
             className="btn-primary"
             onClick={() => onConfirm(value.trim())}
+            disabled={confirmDisabled}
           >
             Confirm
           </button>
@@ -133,6 +142,13 @@ function App() {
   const [modal, setModal] = useState(null); // null | { type, room? }
   const messagesEndRef = useRef(null);
 
+  // ── Actions ──
+
+  const joinRoom = useCallback((roomId) => {
+    setCurrentRoomId(roomId);
+    socket.emit('room:join', roomId);
+  }, []);
+
   // ── Socket events ──
 
   useEffect(() => {
@@ -171,26 +187,24 @@ function App() {
       socket.off('room:deleted');
       socket.off('room:created');
     };
-  }, []);
+  }, [joinRoom]);
+
+  // Sync username to server on login and after page reload
+  useEffect(() => {
+    if (!username) return;
+
+    socket.emit('user:set', username);
+    joinRoom('general');
+  }, [username, joinRoom]);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentRoomId]);
 
-  // ── Actions ──
-
-  function handleLogin(name) {
-    localStorage.setItem('chat_username', name);
-    setUsername(name);
-    socket.emit('user:set', name);
-    // Auto-join general room
-    joinRoom('general');
-  }
-
-  function joinRoom(roomId) {
-    setCurrentRoomId(roomId);
-    socket.emit('room:join', roomId);
+  function handleLogin(newUsername) {
+    localStorage.setItem('chat_username', newUsername);
+    setUsername(newUsername);
   }
 
   function sendMessage(e) {
@@ -331,6 +345,7 @@ function App() {
           placeholder="Type anything to confirm..."
           onConfirm={() => handleDeleteRoom(modal.room)}
           onCancel={() => setModal(null)}
+          requireInput
         />
       )}
     </div>
